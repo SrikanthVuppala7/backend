@@ -7,7 +7,7 @@ app.use(bodyParser.json());
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// 🔥 cache config (avoid fetching every request)
+// 🔥 cache config
 let flaskApiUrl = null;
 
 async function getFlaskUrl() {
@@ -16,13 +16,16 @@ async function getFlaskUrl() {
   const res = await fetch(
     "https://raw.githubusercontent.com/SrikanthVuppala7/project/main/app-config.json"
   );
+
   const data = await res.json();
-  console.log("Fetched Flask URL from config:", data.flask_api_url);
-  // 👇 change key based on your JSON
-  flaskApiUrl = data.flask_api_url; 
+
+  // ✅ force HTTPS (CRITICAL FIX)
+  flaskApiUrl = data.flask_api_url.replace("http://", "https://");
+
+  console.log("Fetched Flask URL:", flaskApiUrl);
+
   return flaskApiUrl;
 }
-    const FLASK_API_URL = await getFlaskUrl();;
 
 app.post('/parse-intent', async (req, res) => {
   try {
@@ -54,18 +57,28 @@ Return ONLY JSON with this schema:
     const content = completion.choices[0].message.content;
     const json = JSON.parse(content);
 
-    // 🔥 get dynamic Flask URL
+    // 🔥 ALWAYS get latest URL (ngrok safe)
+    const FLASK_API_URL = await getFlaskUrl();
+    console.log("Forwarding to:", FLASK_API_URL);
+    console.log("Payload:", JSON.stringify(json));
 
-    // 🔥 forward to Flask
-    fetch(FLASK_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(json)
-    }).catch(err => {
-      console.error("Flask forward error:", err.message);
-    });
+    try {
+      const flaskRes = await fetch(FLASK_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(json)
+      });
+
+      console.log("Flask status:", flaskRes.status);
+
+      const flaskText = await flaskRes.text();
+      console.log("Flask response:", flaskText);
+
+    } catch (err) {
+      console.error("Flask forward FULL error:", err);
+    }
 
     res.json(json);
 
