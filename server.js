@@ -17,11 +17,12 @@ async function getFlaskUrl() {
     "https://raw.githubusercontent.com/SrikanthVuppala7/project/main/app-config.json"
   );
   const data = await res.json();
-
+  console.log("Fetched Flask URL from config:", data.flask_api_url);
   // 👇 change key based on your JSON
   flaskApiUrl = data.flask_api_url; 
   return flaskApiUrl;
 }
+    const FLASK_API_URL = await getFlaskUrl();;
 
 app.post('/parse-intent', async (req, res) => {
   try {
@@ -54,7 +55,6 @@ Return ONLY JSON with this schema:
     const json = JSON.parse(content);
 
     // 🔥 get dynamic Flask URL
-    const FLASK_API_URL = await getFlaskUrl();
 
     // 🔥 forward to Flask
     fetch(FLASK_API_URL, {
