@@ -1,4 +1,3 @@
-// server.js
 import express from 'express';
 import bodyParser from 'body-parser';
 import Groq from 'groq-sdk';
@@ -7,6 +6,22 @@ const app = express();
 app.use(bodyParser.json());
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+// 🔥 cache config (avoid fetching every request)
+let flaskApiUrl = null;
+
+async function getFlaskUrl() {
+  if (flaskApiUrl) return flaskApiUrl;
+
+  const res = await fetch(
+    "https://raw.githubusercontent.com/SrikanthVuppala7/project/main/app-config.json"
+  );
+  const data = await res.json();
+
+  // 👇 change key based on your JSON
+  flaskApiUrl = data.flask_api_url; 
+  return flaskApiUrl;
+}
 
 app.post('/parse-intent', async (req, res) => {
   try {
@@ -29,7 +44,7 @@ Return ONLY JSON with this schema:
 `;
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant', // fast + free tier friendly
+      model: 'llama-3.1-8b-instant',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0,
       response_format: { type: 'json_object' },
@@ -37,7 +52,23 @@ Return ONLY JSON with this schema:
 
     const content = completion.choices[0].message.content;
     const json = JSON.parse(content);
+
+    // 🔥 get dynamic Flask URL
+    const FLASK_API_URL = await getFlaskUrl();
+
+    // 🔥 forward to Flask
+    fetch(FLASK_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(json)
+    }).catch(err => {
+      console.error("Flask forward error:", err.message);
+    });
+
     res.json(json);
+
   } catch (err) {
     console.error('Groq error:', err?.message || err);
     res.status(502).json({ error: 'LLM processing failed' });
